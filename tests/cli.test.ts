@@ -184,3 +184,23 @@ describe("chores update", () => {
     expect(calls).toEqual([]);
   });
 });
+
+import { applyDays, parseDays } from "../src/commands/chores.js";
+describe("--days", () => {
+  it("parses presets, ranges and lists", () => {
+    expect(parseDays("mon-thu", "u")).toEqual(["MO", "TU", "WE", "TH"]);
+    expect(parseDays("weekdays", "u")).toHaveLength(5);
+    expect(parseDays("fri,MO", "u")).toEqual(["MO", "FR"]);
+    expect(parseDays("daily", "u")).toBeNull();
+    expect(() => parseDays("funday", "u")).toThrow(/bad --days/);
+  });
+  it("rewrites BYDAY and converts daily to weekly", () => {
+    expect(applyDays("RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=14", ["MO", "TU", "WE", "TH"])).toBe("RRULE:FREQ=WEEKLY;BYHOUR=14;BYDAY=MO,TU,WE,TH");
+    expect(applyDays("RRULE:FREQ=DAILY;INTERVAL=1;BYHOUR=6", ["MO", "TU"])).toBe("RRULE:FREQ=WEEKLY;INTERVAL=1;BYHOUR=6;BYDAY=MO,TU");
+    expect(applyDays("RRULE:FREQ=WEEKLY;BYDAY=MO", null)).toBe("RRULE:FREQ=DAILY");
+  });
+  it("buildUpdate honors --days", () => {
+    const cur = { summary: "m", member_id: "7", routine: true, start_time: "14:00", recurrence_set: ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=14"] };
+    expect(buildUpdate(cur, { days: "mon-thu" }).body.recurrence_set).toEqual(["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;BYHOUR=14"]);
+  });
+});

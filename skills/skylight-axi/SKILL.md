@@ -48,6 +48,7 @@ subcommands:
               [--slot S]                                     move a routine to another block
               [--chore --time HH:MM]                         make a routine a timed chore again
               [--time HH:MM]                                 retime a chore
+              [--days mon-thu|weekdays|daily|MO,TU,..]       change which days it repeats
               [--dry-run]                                    show the request, send nothing
               Edits the WHOLE SERIES. It also clears today's completion of that chore (see note).
 examples:
@@ -56,6 +57,7 @@ examples:
   skylight-axi chores done 987 --date 2026-11-04
   skylight-axi chores update 115854213 --routine --slot afternoon --emoji 🧺
   skylight-axi chores update 70394328 --points 2 --dry-run
+  skylight-axi chores update 78020488 --days mon-thu
 notes: <id> may be an occurrence id or a series id. Skylight allows routines only at 6:00, 14:00 and 20:00.
   Editing a series resets that chore's completion for today (points already earned are kept).
 

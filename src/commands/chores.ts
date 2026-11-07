@@ -8,8 +8,8 @@ const ADD: Spec = { usage: 'skylight-axi chores add --title "..." --member <name
 const DONE: Spec = { usage: "skylight-axi chores done <id> [--date YYYY-MM-DD] [--time HH:MM] [--member <name|id>]", flags: { date: "string", time: "string", member: "string" } };
 const REOPEN: Spec = { usage: "skylight-axi chores reopen <id> [--date YYYY-MM-DD] [--time HH:MM]", flags: { date: "string", time: "string" } };
 const UPDATE: Spec = {
-  usage: 'skylight-axi chores update <id> [--title T] [--emoji E] [--points N | --no-points] [--routine --slot morning|afternoon|evening | --chore --time HH:MM | --slot S | --time HH:MM] [--member M] [--description D] [--dry-run]',
-  flags: { title: "string", emoji: "string", points: "string", "no-points": "boolean", routine: "boolean", chore: "boolean", slot: "string", time: "string", member: "string", description: "string", "dry-run": "boolean" },
+  usage: 'skylight-axi chores update <id> [--title T] [--emoji E] [--points N | --no-points] [--routine --slot morning|afternoon|evening | --chore --time HH:MM | --slot S | --time HH:MM] [--days D] [--member M] [--description D] [--dry-run]',
+  flags: { title: "string", emoji: "string", points: "string", "no-points": "boolean", routine: "boolean", chore: "boolean", slot: "string", time: "string", days: "string", member: "string", description: "string", "dry-run": "boolean" },
 };
 /** Routine blocks: Skylight allows only 6:00, 14:00 and 20:00. Meal names are aliases (breakfast/lunch/dinner). */
 const SLOTS: Record<string, number> = { morning: 6, breakfast: 6, afternoon: 14, lunch: 14, evening: 20, dinner: 20 };
@@ -28,6 +28,7 @@ subcommands:
               [--slot S]                                     move a routine to another block
               [--chore --time HH:MM]                         make a routine a timed chore again
               [--time HH:MM]                                 retime a chore
+              [--days mon-thu|weekdays|daily|MO,TU,..]       change which days it repeats
               [--dry-run]                                    show the request, send nothing
               Edits the WHOLE SERIES. It also clears today's completion of that chore (see note).
 examples:
@@ -36,6 +37,7 @@ examples:
   skylight-axi chores done 987 --date 2026-11-04
   skylight-axi chores update 115854213 --routine --slot afternoon --emoji 🧺
   skylight-axi chores update 70394328 --points 2 --dry-run
+  skylight-axi chores update 78020488 --days mon-thu
 notes: <id> may be an occurrence id or a series id. Skylight allows routines only at 6:00, 14:00 and 20:00.
   Editing a series resets that chore's completion for today (points already earned are kept).
 `;
@@ -125,6 +127,34 @@ export function stripTime(rule: string): string {
   return rule.split(";").filter((p) => !/^BY(HOUR|MINUTE)=/.test(p)).join(";");
 }
 
+const DAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+const DAY_NAMES: Record<string, string> = { mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA", sun: "SU" };
+
+/** Parse --days: "mon-thu", "weekdays", "daily", or a list like "MO,WE,fri". Returns null for daily. */
+export function parseDays(v: string, usage: string): string[] | null {
+  const x = v.trim().toLowerCase();
+  if (x === "daily") return null;
+  if (x === "weekdays") return DAY_CODES.slice(0, 5);
+  const range = /^([a-z]{3})-([a-z]{3})$/.exec(x);
+  const code = (d: string) => DAY_NAMES[d.slice(0, 3)] ?? d.toUpperCase();
+  if (range) {
+    const a = DAY_CODES.indexOf(code(range[1])), b = DAY_CODES.indexOf(code(range[2]));
+    if (a < 0 || b < a) throw usageError(`bad --days range "${v}"`, usage);
+    return DAY_CODES.slice(a, b + 1);
+  }
+  const list = x.split(",").map((d) => code(d.trim()));
+  if (!list.length || list.some((d) => !DAY_CODES.includes(d))) throw usageError(`bad --days "${v}" (use mon-thu, weekdays, daily, or MO,TU,...)`, usage);
+  return DAY_CODES.filter((d) => list.includes(d));
+}
+
+/** Set the repeat days of an RRULE (daily rules become weekly with BYDAY; null = every day). */
+export function applyDays(rule: string, days: string[] | null): string {
+  const parts = rule.split(";").filter((p) => !p.startsWith("BYDAY="));
+  const freq = (to: string) => (p: string) => p.replace(/FREQ=(DAILY|WEEKLY)$/, `FREQ=${to}`);
+  if (days === null) return parts.map(freq("DAILY")).join(";");
+  return [...parts.map(freq("WEEKLY")), `BYDAY=${days.join(",")}`].join(";");
+}
+
 /** Build the full-series PUT body from the current series definition plus the requested changes. */
 export function buildUpdate(cur: Record<string, unknown>, f: Record<string, string | boolean | undefined>, memberId?: string): { body: Record<string, unknown>; kind: string } {
   const u = UPDATE.usage;
@@ -148,6 +178,8 @@ export function buildUpdate(cur: Record<string, unknown>, f: Record<string, stri
   const isRoutine = toChore ? false : toRoutine || wasRoutine;
   const rules = (cur.recurrence_set as string[] | undefined) ?? [];
   let rule = rules[0];
+  if (str(f.days) !== undefined && rule) rule = applyDays(rule, parseDays(str(f.days)!, u));
+  else if (str(f.days) !== undefined) throw usageError("this chore has no repeat rule to change", u);
   const body: Record<string, unknown> = {
     summary: str(f.title) ?? cur.summary,
     category_id: memberId ?? cur.member_id,
@@ -176,7 +208,7 @@ const SLOT_OF = (t: unknown) => {
 async function updateChore(rest: string[], c: Client) {
   const { pos, flags } = parseArgs(rest, UPDATE);
   requirePosOrFail(pos, 1, UPDATE.usage, "chore id");
-  const changing = ["title", "emoji", "points", "no-points", "routine", "chore", "slot", "time", "member", "description"].some((k) => flags[k] !== undefined);
+  const changing = ["title", "emoji", "points", "no-points", "routine", "chore", "slot", "time", "days", "member", "description"].some((k) => flags[k] !== undefined);
   if (!changing) throw usageError("nothing to update; pass at least one field flag", UPDATE.usage);
   const series = pos[0].split("-")[0];
   // The list endpoint is the only read; look a week either way so weekly chores are found.
