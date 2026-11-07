@@ -27,7 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Live-API facts that are easy to get wrong (all verified against a real account)
 
 - **Event queries:** `date_max` is exclusive and, without `timezone`, results are UTC. `fetchEvents` sends `to+1` and the local zone (`SKYLIGHT_TIMEZONE` overrides). Chores and meals ranges behave inclusively.
-- **Routines vs chores:** distinguished by the `routine` attribute. Routines may only run at `BYHOUR` 6, 14 or 20 (one `BYHOUR`, set in the RRULE; the server 422s otherwise). `start_time` must be omitted when the series is already a routine, and sent when converting a chore to a routine.
+- **Routines vs chores:** distinguished by the `routine` attribute. `--slot` also accepts breakfast=morning(6), lunch=afternoon(14), dinner=evening(20). Routines may only run at `BYHOUR` 6, 14 or 20 (one `BYHOUR`, set in the RRULE; the server 422s otherwise). `start_time` must be omitted when the series is already a routine, and sent when converting a chore to a routine.
 - **Series edits:** `PUT /frames/{f}/chores/{seriesId}` takes the *full* chore body, not a patch, and resets that chore's completion for today (earned points are kept). `chores update` builds the body from the current definition (`buildUpdate`) and supports `--dry-run`. The routine→chore path (`--chore`) is untested against the live API.
 - **Chore ids:** occurrence ids look like `<series>-<date>[-<HHMM>]`; the series id is the part before the first `-`. A chore's assignee exists only in `relationships.category`.
 - **Error details:** Skylight 422 bodies explain the problem (`{"errors":{field:[msg]}}`); `httpError` in `client.ts` surfaces them. Keep that, since the messages are how new constraints get discovered.

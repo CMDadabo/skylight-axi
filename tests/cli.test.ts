@@ -140,6 +140,10 @@ describe("chores update", () => {
     expect(kind).toBe("routine");
     expect(body).toMatchObject({ routine: true, start_time: "14:00", reward_points: 4, emoji_icon: "🧺", category_id: "7", recurrence_set: ["RRULE:FREQ=DAILY;INTERVAL=1;BYHOUR=14"] });
   });
+  it("meal names alias the routine blocks", () => {
+    for (const [slot, hour] of [["breakfast", 6], ["lunch", 14], ["dinner", 20]] as const)
+      expect(buildUpdate(chore, { routine: true, slot }).body.recurrence_set).toEqual([`RRULE:FREQ=DAILY;INTERVAL=1;BYHOUR=${hour}`]);
+  });
   it("already-routine edits omit start_time (API: must be blank) and can move slot", () => {
     const { body } = buildUpdate(routine, { slot: "evening" });
     expect(body).not.toHaveProperty("start_time");
@@ -152,7 +156,7 @@ describe("chores update", () => {
   });
   it("validates before building", () => {
     expect(() => buildUpdate(chore, { routine: true })).toThrow(/--slot/);
-    expect(() => buildUpdate(chore, { routine: true, slot: "noon" })).toThrow(/morning, afternoon or evening/);
+    expect(() => buildUpdate(chore, { routine: true, slot: "noon" })).toThrow(/morning\|breakfast/);
     expect(() => buildUpdate(routine, { time: "09:00" })).toThrow(/no --time/);
     expect(() => buildUpdate(chore, { points: "x" })).toThrow(/number/);
   });

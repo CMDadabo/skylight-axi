@@ -11,7 +11,8 @@ const UPDATE: Spec = {
   usage: 'skylight-axi chores update <id> [--title T] [--emoji E] [--points N | --no-points] [--routine --slot morning|afternoon|evening | --chore --time HH:MM | --slot S | --time HH:MM] [--member M] [--description D] [--dry-run]',
   flags: { title: "string", emoji: "string", points: "string", "no-points": "boolean", routine: "boolean", chore: "boolean", slot: "string", time: "string", member: "string", description: "string", "dry-run": "boolean" },
 };
-const SLOTS: Record<string, number> = { morning: 6, afternoon: 14, evening: 20 };
+/** Routine blocks: Skylight allows only 6:00, 14:00 and 20:00. Meal names are aliases (breakfast/lunch/dinner). */
+const SLOTS: Record<string, number> = { morning: 6, breakfast: 6, afternoon: 14, lunch: 14, evening: 20, dinner: 20 };
 const DELETE: Spec = { usage: "skylight-axi chores delete <id> [--one | --all]", flags: { one: "boolean", all: "boolean" } };
 
 export const CHORES_HELP = `usage: skylight-axi chores <subcommand>
@@ -23,6 +24,7 @@ subcommands:
   delete <id> [--one | --all]   (recurring: --one = this occurrence, --all = whole series)
   update <id> [--title T] [--emoji E] [--points N | --no-points] [--member M] [--description D]
               [--routine --slot morning|afternoon|evening]   make it a routine (6:00 / 14:00 / 20:00)
+                  slot aliases: breakfast=morning, lunch=afternoon, dinner=evening
               [--slot S]                                     move a routine to another block
               [--chore --time HH:MM]                         make a routine a timed chore again
               [--time HH:MM]                                 retime a chore
@@ -129,7 +131,7 @@ export function buildUpdate(cur: Record<string, unknown>, f: Record<string, stri
   if (f.routine && f.chore) throw usageError("pass only one of --routine / --chore", u);
   const wasRoutine = cur.routine === true;
   const slotName = str(f.slot);
-  if (slotName !== undefined && !(slotName in SLOTS)) throw usageError("--slot must be morning, afternoon or evening", u);
+  if (slotName !== undefined && !(slotName in SLOTS)) throw usageError("--slot must be morning|breakfast, afternoon|lunch or evening|dinner", u);
   if (str(f.time) !== undefined && !HHMM.test(str(f.time)!)) throw usageError("--time must be HH:MM (24h)", u);
   if (str(f.points) !== undefined && f["no-points"]) throw usageError("pass only one of --points / --no-points", u);
   const points = str(f.points) === undefined ? undefined : Number(f.points);
@@ -137,7 +139,7 @@ export function buildUpdate(cur: Record<string, unknown>, f: Record<string, stri
 
   const toRoutine = f.routine === true;
   const toChore = f.chore === true;
-  if (toRoutine && !wasRoutine && !slotName) throw usageError("--routine needs --slot morning|afternoon|evening (Skylight allows routines only at 6:00, 14:00, 20:00)", u);
+  if (toRoutine && !wasRoutine && !slotName) throw usageError("--routine needs --slot morning|afternoon|evening, or breakfast|lunch|dinner (Skylight allows routines only at 6:00, 14:00, 20:00)", u);
   if (toChore && wasRoutine && !str(f.time)) throw usageError("--chore needs --time HH:MM", u);
   if (slotName && toChore) throw usageError("--slot applies to routines; use --time with --chore", u);
   if (slotName && !toRoutine && !wasRoutine) throw usageError("--slot needs --routine (this is a chore)", u);

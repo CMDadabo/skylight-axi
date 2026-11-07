@@ -44,6 +44,7 @@ subcommands:
   delete <id> [--one | --all]   (recurring: --one = this occurrence, --all = whole series)
   update <id> [--title T] [--emoji E] [--points N | --no-points] [--member M] [--description D]
               [--routine --slot morning|afternoon|evening]   make it a routine (6:00 / 14:00 / 20:00)
+                  slot aliases: breakfast=morning, lunch=afternoon, dinner=evening
               [--slot S]                                     move a routine to another block
               [--chore --time HH:MM]                         make a routine a timed chore again
               [--time HH:MM]                                 retime a chore
